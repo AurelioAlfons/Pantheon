@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     mode: Literal["demo", "personal"] = "demo"
     agent_config_dir: Path = REPO_ROOT / "agents"
 
-    # step 4 (database) isn't built yet -- required-with-no-default would crash Settings()
-    # at import time before the app even boots, so these stay optional til then
-    database_url: str = ""
+    # database's built now (step 4) -- no default means Settings() crashes at import if
+    # DATABASE_URL is missing, same as any other required config, no more quiet ""
+    database_url: str
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_key: str = ""
