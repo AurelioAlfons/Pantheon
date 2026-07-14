@@ -1,0 +1,27 @@
+# Project docs kept local-only (see CLAUDE.md working rules).
+# Root-only: frontend/CLAUDE.md is a separate, legitimate file auto-generated
+# by create-next-app and should be committed.
+/CLAUDE.md
+/PROGRESS.md
+
+# Claude Code local config
+.claude/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# OS cruft
+.DS_Store
+Thumbs.db
