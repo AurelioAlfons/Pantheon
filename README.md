@@ -5,7 +5,7 @@ Building a multi-agent AI system with a shared task queue and a Digimon World Ch
 ## Structure
 
 - `backend/` — FastAPI app (Python 3.11, venv + `requirements.txt`)
-- `frontend/` — Next.js app, thin client only, no business logic
+- `frontend/` — React + TypeScript + Vite app, thin client only, no business logic
 - `agents/` — Markdown agent configs (YAML frontmatter + system prompt), loaded at runtime
 
 ## Running locally
