@@ -6,7 +6,7 @@ Building a multi-agent AI system with a shared task queue and a Digimon World Ch
 
 - `backend/` — FastAPI app (Python 3.11, venv + `requirements.txt`)
 - `frontend/` — React + TypeScript + Vite app, thin client only, no business logic
-- `agents/` — Markdown agent configs (YAML frontmatter + system prompt), loaded at runtime
+- `agents/` — Markdown agent configs (YAML frontmatter + system prompt), loaded at runtime. See `agents/README.md` for the pattern.
 
 ## Running locally
 
@@ -32,7 +32,7 @@ npm run dev
 Copy `.env` at the repo root with:
 
 ```
-MODE=demo   # or "live"
+MODE=demo   # or "personal"
 ```
 
-I use `demo` mode for the public portfolio instance (mocked integrations, rate-limited) and `live` mode behind auth with real integrations.
+I use `demo` mode for the public portfolio instance (mocked integrations, rate-limited, committed `agents/` templates) and `personal` mode for my own private instance behind auth, with real integrations and agent configs that live outside this repo.

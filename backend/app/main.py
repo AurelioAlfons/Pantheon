@@ -1,17 +1,24 @@
 """FastAPI entrypoint for the Pantheon backend."""
 
-import os
+from contextlib import asynccontextmanager
 
-from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI
 
-# .env lives at the repo root (one level above backend/), shared by all services.
-load_dotenv(find_dotenv())
+from app.core.settings import settings, validate_startup
 
-app = FastAPI(title="Pantheon")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # crash on boot, not on the first request -- a leaked cred or a missing one should
+    # fail the deploy, not get discovered by whoever hits the API first
+    validate_startup(settings)
+    yield
+
+
+app = FastAPI(title="Pantheon", lifespan=lifespan)
 
 
 @app.get("/health")
 def health() -> dict:
     """Liveness check used by the repo-skeleton test and future deploy checks."""
-    return {"status": "ok", "mode": os.getenv("MODE", "demo")}
+    return {"status": "ok", "mode": settings.mode}
