@@ -6,7 +6,7 @@ These six are currently written for the devops-product-team framing: ASSIST disp
 
 ## Retargeting to a different domain
 
-The six roles are a pattern, not a hardcoded identity — see `MD/execution/USE_CASE_BRAINSTORM.md` for the reasoning behind this. If the use case ever changes, each role maps generically:
+The six roles are a pattern, not a hardcoded identity. If the use case ever changes, each role maps generically:
 
 | File | Generic role |
 |---|---|
@@ -21,4 +21,4 @@ To retarget: rewrite `role` in the frontmatter and the body prompt for the new d
 
 ## What never goes here
 
-Personal-mode configs with real integrations (real email access, for example) live outside this repo entirely, referenced via `AGENT_CONFIG_DIR` on the personal deployment — see `MD/project-scope/REFACTOR_SPEC.md`. Nothing with real personal context belongs in `agents/`.
+Personal-mode configs with real integrations (real email access, for example) live outside this repo entirely, referenced via `AGENT_CONFIG_DIR` on the personal deployment. Nothing with real personal context belongs in `agents/`.
