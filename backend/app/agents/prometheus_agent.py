@@ -23,13 +23,23 @@ class PrometheusAgent(BaseAgent):
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         response = client.messages.create(
             model=self.config.model,
-            max_tokens=4096,  # hardcoded for now, revisit if a real per-agent tuning need shows up
+            # 8192, not 4096 -- thinking alone can eat the whole budget on a meaty plan
+            # before any text comes out (see the ValueError below)
+            max_tokens=8192,
             system=self.config.system_prompt + JSON_ONLY_INSTRUCTION,
             messages=[{"role": "user", "content": payload.get("request", "")}],
         )
         # thinking is on by default for this model, so a ThinkingBlock can precede the
-        # TextBlock -- content[0] isn't reliably the answer, find the text block itself
-        raw_text = next(block.text for block in response.content if block.type == "text")
+        # TextBlock -- content[0] isn't reliably the answer, find the text block itself.
+        # If thinking ate the whole max_tokens budget, there's no text block at all --
+        # raise something debuggable, not a bare StopIteration
+        try:
+            raw_text = next(block.text for block in response.content if block.type == "text")
+        except StopIteration:
+            raise ValueError(
+                f"Prometheus's reply had no text block (stop_reason={response.stop_reason!r}) -- "
+                "likely ran out of max_tokens while still thinking"
+            ) from None
         try:
             return json.loads(raw_text)
         except json.JSONDecodeError as exc:

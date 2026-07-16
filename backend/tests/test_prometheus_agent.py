@@ -85,3 +85,18 @@ def test_run_ends_failed_with_raw_text_in_error_on_malformed_json() -> None:
     assert agent.state == "failed"
     assert result is None
     assert "not json at all" in agent.error
+
+
+def test_execute_raises_clear_error_when_no_text_block_at_all() -> None:
+    # a real failure mode: thinking eats the whole max_tokens budget before any text
+    # comes out, leaving content with no text block -- next(...) alone would raise a
+    # bare StopIteration with an empty message, so this must be caught and re-raised
+    agent = PrometheusAgent(_prometheus_config())
+    thinking_only_client = MagicMock()
+    thinking_only_client.messages.create.return_value = MagicMock(
+        content=[MagicMock(type="thinking")], stop_reason="max_tokens"
+    )
+
+    with patch("app.agents.prometheus_agent.anthropic.Anthropic", return_value=thinking_only_client):
+        with pytest.raises(ValueError, match="no text block"):
+            agent.execute({"request": "plan a todo app"})
