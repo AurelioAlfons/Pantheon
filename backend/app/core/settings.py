@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     session_secret: str = ""
 
     max_task_chain_depth: int = 10
+    scheduler_poll_interval_seconds: int = 5  # how often the poller sweeps the tasks table for pending rows
 
     @field_validator("agent_config_dir", mode="after")
     @classmethod

@@ -1,8 +1,13 @@
-"""POST /tasks + GET /tasks/{id} (+ /children), with both agents' execute() mocked -- no real Claude call in this suite.
+"""POST /tasks + GET /tasks/{id} (+ /children), driving the scheduler poller by hand so no real Claude call fires.
 
-Can't use test_database.py's rollback-per-test fixture here: the background job that
-actually runs the agent opens its own connection, separate from any transaction this
-test might hold open, so it needs to see rows for real. Commit for real, clean up after.
+Two things differ from the step-7 version:
+- POST /tasks no longer runs the agent -- it just inserts a pending row. Nothing reaches "done"
+  until a poll tick runs, so tests call poll_pending_tasks() explicitly where they used to just POST.
+- A full Prometheus -> Asmoday chain takes TWO ticks: tick one runs Prometheus and spawns pending
+  children, tick two runs those children. So the children test polls twice.
+
+Real rows are committed (the poller opens its own connection and must see them), then cleaned up.
+The client fixture patches out start_scheduler so the real background poller doesn't race these.
 """
 
 from unittest.mock import patch
@@ -11,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal
+from app.core.scheduler import poll_pending_tasks
 from app.main import app
 from app.models import Task
 
@@ -27,16 +33,18 @@ VALID_CODE_RESULT = {"code": "def build_api(): ..."}
 
 @pytest.fixture(scope="module")
 def client():
-    # the plain TestClient(app) form never runs the lifespan, so app.state.agent_configs
-    # stays unset -- the "with" form is what actually triggers startup/shutdown
-    with TestClient(app) as test_client:
-        yield test_client
+    # patch out the real background poller -- otherwise it ticks every few seconds against
+    # these rows and races the explicit poll_pending_tasks() calls the tests make by hand.
+    # the "with" form still runs the lifespan, so app.state.agent_configs is set.
+    with patch("app.main.start_scheduler"):
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 @pytest.fixture
 def created_task_ids():
-    # a Prometheus task now spawns real Asmoday children -- delete those first, the FK
-    # on parent_task_id would reject deleting the parent while a child still references it
+    # a Prometheus task spawns real Asmoday children -- delete those first, the FK on
+    # parent_task_id rejects deleting a parent while a child still references it
     ids: list[str] = []
     yield ids
     with SessionLocal() as session:
@@ -58,13 +66,12 @@ def _mock_agents():
     )
 
 
-def test_post_tasks_returns_201(client: TestClient, created_task_ids: list[str]) -> None:
-    mock_prometheus, mock_asmoday = _mock_agents()
-    with mock_prometheus, mock_asmoday:
-        response = client.post(
-            "/tasks",
-            json={"created_by": "owner", "assigned_to": "Prometheus", "payload": {"request": "plan a todo app"}},
-        )
+def test_post_tasks_returns_201_and_stays_pending(client: TestClient, created_task_ids: list[str]) -> None:
+    # no poll tick -- so the row must still be pending, proving POST doesn't process anymore
+    response = client.post(
+        "/tasks",
+        json={"created_by": "owner", "assigned_to": "Prometheus", "payload": {"request": "plan a todo app"}},
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -73,15 +80,17 @@ def test_post_tasks_returns_201(client: TestClient, created_task_ids: list[str])
     assert body["status"] == "pending"
 
 
-def test_get_task_shows_done_with_structured_result(client: TestClient, created_task_ids: list[str]) -> None:
+def test_poll_tick_flips_task_to_done_with_structured_result(client: TestClient, created_task_ids: list[str]) -> None:
     mock_prometheus, mock_asmoday = _mock_agents()
     with mock_prometheus, mock_asmoday:
         post_response = client.post(
             "/tasks",
             json={"created_by": "owner", "assigned_to": "Prometheus", "payload": {"request": "plan a todo app"}},
         )
-    task_id = post_response.json()["id"]
-    created_task_ids.append(task_id)
+        task_id = post_response.json()["id"]
+        created_task_ids.append(task_id)
+
+        poll_pending_tasks(app.state.agent_configs)  # one tick runs the Prometheus task
 
     get_response = client.get(f"/tasks/{task_id}")
 
@@ -91,17 +100,18 @@ def test_get_task_shows_done_with_structured_result(client: TestClient, created_
     assert body["result"] == VALID_PRD
 
 
-def test_prometheus_done_spawns_one_asmoday_child_per_task_breakdown_item(
-    client: TestClient, created_task_ids: list[str]
-) -> None:
+def test_two_ticks_run_prometheus_then_its_asmoday_children(client: TestClient, created_task_ids: list[str]) -> None:
     mock_prometheus, mock_asmoday = _mock_agents()
     with mock_prometheus, mock_asmoday:
         post_response = client.post(
             "/tasks",
             json={"created_by": "owner", "assigned_to": "Prometheus", "payload": {"request": "plan a todo app"}},
         )
-    task_id = post_response.json()["id"]
-    created_task_ids.append(task_id)
+        task_id = post_response.json()["id"]
+        created_task_ids.append(task_id)
+
+        poll_pending_tasks(app.state.agent_configs)  # tick 1: runs Prometheus, spawns children pending
+        poll_pending_tasks(app.state.agent_configs)  # tick 2: runs the spawned Asmoday children
 
     children_response = client.get(f"/tasks/{task_id}/children")
 
@@ -130,13 +140,12 @@ def test_get_task_unknown_id_returns_404(client: TestClient) -> None:
 
 
 def test_get_task_children_empty_for_task_with_no_children(client: TestClient, created_task_ids: list[str]) -> None:
-    mock_prometheus, mock_asmoday = _mock_agents()
-    with mock_prometheus, mock_asmoday:
-        # Asmoday itself has no task_breakdown to spawn from -- its own children list stays empty
-        response = client.post(
-            "/tasks",
-            json={"created_by": "owner", "assigned_to": "Asmoday", "payload": {"request": "build X"}},
-        )
+    # Asmoday spawns no children -- its children list is empty whether or not it has run yet,
+    # so no poll tick is needed for this assertion
+    response = client.post(
+        "/tasks",
+        json={"created_by": "owner", "assigned_to": "Asmoday", "payload": {"request": "build X"}},
+    )
     task_id = response.json()["id"]
     created_task_ids.append(task_id)
 

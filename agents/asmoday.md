@@ -1,7 +1,7 @@
 ---
 name: Asmoday
 role: Developer — writes code as task output (does not execute or commit code)
-model: claude-sonnet-5
+model: claude-opus-4-8
 tools: []
 schedule: on-demand
 # template: generic devops-team framing — see agents/README.md before retargeting

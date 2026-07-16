@@ -1,11 +1,11 @@
-"""POST /tasks kicks off an agent run in a FastAPI background task; GET /tasks/{id} lets you poll the result.
+"""POST /tasks inserts a pending row and returns; the scheduler poller (core/scheduler.py) does the actual work.
 
-No scheduler yet (that's step 8) -- the background task is an interim mechanism for this step only.
+GET /tasks/{id} polls one task's status/result; GET /tasks/{id}/children lists what it spawned.
 """
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -48,7 +48,10 @@ class TaskResponse(BaseModel):
 def _spawn_asmoday_children(
     session: Session, parent: Task, prd: dict, agent_configs: dict[str, AgentConfig]
 ) -> None:
-    """one Asmoday child per task_breakdown item -- a failed spawn (e.g. depth cap) is skipped, not fatal to the batch"""
+    """one pending Asmoday child per task_breakdown item -- the scheduler's next tick runs them.
+
+    A failed spawn (e.g. depth cap) is skipped, not fatal to the batch.
+    """
     scope = prd.get("scope", "")
     for item in prd.get("task_breakdown", []):
         child_payload = {
@@ -58,12 +61,9 @@ def _spawn_asmoday_children(
             )
         }
         try:
-            child = spawn_child_task(session, parent, "Asmoday", child_payload)
+            spawn_child_task(session, parent, "Asmoday", child_payload)
         except ValueError:
             continue
-
-        # run it now, not left pending -- there's no scheduler yet (step 8) to pick it up later
-        _run_agent_task(child.id, "Asmoday", agent_configs["Asmoday"], child_payload, agent_configs)
 
 
 def _run_agent_task(
@@ -73,7 +73,7 @@ def _run_agent_task(
     payload: dict | None,
     agent_configs: dict[str, AgentConfig],
 ) -> None:
-    """the background job -- opens its own session, since the request's session is already closed by the time this runs"""
+    """runs one task to completion -- called by the scheduler poller, opens its own DB session"""
     session = SessionLocal()
     try:
         task = session.get(Task, task_id)
@@ -88,6 +88,8 @@ def _run_agent_task(
         task.result = result if agent.state == "done" else {"error": agent.error}
         session.commit()
 
+        # a finished Prometheus plan spawns Asmoday children as pending rows -- they don't run
+        # here, the next poll tick picks them up
         if assigned_to == "Prometheus" and agent.state == "done":
             _spawn_asmoday_children(session, task, result, agent_configs)
     finally:
@@ -95,13 +97,14 @@ def _run_agent_task(
 
 
 @router.post("/tasks", response_model=TaskResponse, status_code=201)
-def create_task(body: TaskCreateRequest, request: Request, background_tasks: BackgroundTasks) -> Task:
+def create_task(body: TaskCreateRequest, request: Request) -> Task:
     agent_configs: dict[str, AgentConfig] = request.app.state.agent_configs
     if body.assigned_to not in agent_configs:
         raise HTTPException(status_code=422, detail=f"'{body.assigned_to}' isn't a loaded agent")
 
     session = SessionLocal()
     try:
+        # just drop a pending row and return -- the scheduler poller runs it on the next tick
         task = Task(
             status="pending",
             payload=body.payload,
@@ -112,11 +115,6 @@ def create_task(body: TaskCreateRequest, request: Request, background_tasks: Bac
         session.add(task)
         session.commit()
         session.refresh(task)
-
-        background_tasks.add_task(
-            _run_agent_task, task.id, body.assigned_to, agent_configs[body.assigned_to], body.payload, agent_configs
-        )
-
         return task
     finally:
         session.close()

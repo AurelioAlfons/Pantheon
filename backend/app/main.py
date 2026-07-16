@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app.agents.config_loader import load_all_agent_configs
 from app.api.tasks import router as tasks_router
+from app.core.scheduler import start_scheduler
 from app.core.settings import settings, validate_startup
 
 
@@ -16,7 +17,12 @@ async def lifespan(app: FastAPI):
     validate_startup(settings)
     # same fail-fast philosophy -- a bad agents/*.md fails the boot, not the first task that needs it
     app.state.agent_configs = load_all_agent_configs(settings.agent_config_dir)
-    yield
+    # the poller that actually runs tasks -- starts on boot, shuts down cleanly on exit
+    scheduler = start_scheduler(app.state.agent_configs)
+    try:
+        yield
+    finally:
+        scheduler.shutdown()
 
 
 app = FastAPI(title="Pantheon", lifespan=lifespan)
