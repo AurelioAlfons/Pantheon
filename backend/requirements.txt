@@ -7,3 +7,5 @@ pydantic-settings
 sqlalchemy
 alembic
 psycopg2-binary
+anthropic
+httpx

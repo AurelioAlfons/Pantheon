@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # database's built now (step 4) -- no default means Settings() crashes at import if
     # DATABASE_URL is missing, same as any other required config, no more quiet ""
     database_url: str
+    # required in every mode, unlike gmail (personal-only) -- no version of this product
+    # ships with agents that don't actually think, so no separate validate_startup() branch
+    anthropic_api_key: str
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_key: str = ""

@@ -31,5 +31,5 @@ def test_frontmatter_has_required_fields(path: Path) -> None:
 def test_all_six_agents_present() -> None:
     # catches a silently-missing file that the parametrize glob would just skip over
     found = {p.stem for p in _agent_files()}
-    expected = {"assist", "prometheus", "asmoday", "hermes", "aizen", "khepri"}
+    expected = {"ASSIST", "prometheus", "asmoday", "hermes", "aizen", "khepri"}
     assert found == expected, f"expected {expected}, found {found}"

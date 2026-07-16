@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.agents.config_loader import load_all_agent_configs
+from app.api.tasks import router as tasks_router
 from app.core.settings import settings, validate_startup
 
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Pantheon", lifespan=lifespan)
+app.include_router(tasks_router)
 
 
 @app.get("/health")
