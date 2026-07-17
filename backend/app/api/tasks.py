@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.agents.asmoday_agent import AsmodayAgent
 from app.agents.base_agent import BaseAgent
 from app.agents.config import AgentConfig
+from app.agents.hermes_agent import HermesAgent
 from app.agents.prometheus_agent import PrometheusAgent
 from app.api.task_chain import spawn_child_task
 from app.core.database import SessionLocal
@@ -19,9 +20,13 @@ from app.models import Agent, Task
 
 router = APIRouter()
 
-# plain explicit mapping -- a config-driven registry isn't worth building until step 10
-# brings on the remaining agents, two entries doesn't justify one yet
-AGENT_CLASSES: dict[str, type[BaseAgent]] = {"Prometheus": PrometheusAgent, "Asmoday": AsmodayAgent}
+# plain explicit mapping -- still not worth a config-driven registry at three entries.
+# revisit once Aizen/Khepri/ASSIST land and this is six
+AGENT_CLASSES: dict[str, type[BaseAgent]] = {
+    "Prometheus": PrometheusAgent,
+    "Asmoday": AsmodayAgent,
+    "Hermes": HermesAgent,
+}
 
 
 class TaskCreateRequest(BaseModel):
