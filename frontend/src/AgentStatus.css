@@ -1,0 +1,155 @@
+/* ===== STATUS PAGE LAYOUT ===== */
+
+.status-page {
+  /* ASSIST's own color -- light blue, kept off the purple so the overseer reads as its own thing
+     and doesn't get mistaken for the site accent */
+  --assist: #387bf8;
+  --assist-bg: rgb(43, 110, 255);
+  --assist-border: rgba(56, 59, 248, 0.5);
+}
+
+/* #root centers everything for the vite starter -- undo that, a table wants to sit left */
+.status-page {
+  text-align: left;
+  padding: 0 24px 48px;
+}
+
+.status-error {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 15px;
+}
+
+/* ===== TABLE ===== */
+
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.status-table th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 500;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  text-align: left;
+}
+
+.status-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+/* ASSIST sits in row one as the overseer -- give it a little weight so it reads as the top of the chain */
+.status-table tbody tr:first-child {
+  background: var(--assist-bg);
+}
+
+/* ===== AVATARS ===== */
+
+.col-avatar {
+  width: 64px;
+}
+
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--code-bg);
+  display: block;
+}
+
+/* stand-in until an ASSIST.png exists -- same box, just the initial */
+.avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--assist-border);
+  color: var(--assist);
+  font-family: var(--heading);
+  font-size: 22px;
+}
+
+/* ===== CELLS ===== */
+
+.agent-name {
+  color: var(--text-h);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.agent-role {
+  max-width: 380px;
+  font-size: 14px;
+  line-height: 130%;
+}
+
+.agent-model,
+.agent-updated {
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ===== STATUS BADGES ===== */
+
+/* one class per status the api can send -- idle | running | done | failed */
+.badge {
+  display: inline-block;
+  min-width: 74px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+}
+
+.badge-idle {
+  border-color: var(--border);
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+/* the only live state -- pulses so a working agent catches your eye across the room */
+.badge-running {
+  border-color: rgba(245, 165, 36, 0.5);
+  background: rgba(245, 165, 36, 0.12);
+  color: #f5a524;
+  animation: badge-pulse 1.4s ease-in-out infinite;
+}
+
+.badge-done {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.badge-failed {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+@keyframes badge-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* respect the OS setting -- a pulsing badge is decoration, not information */
+@media (prefers-reduced-motion: reduce) {
+  .badge-running {
+    animation: none;
+  }
+}
