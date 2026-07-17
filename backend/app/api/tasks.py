@@ -15,7 +15,7 @@ from app.agents.config import AgentConfig
 from app.agents.prometheus_agent import PrometheusAgent
 from app.api.task_chain import spawn_child_task
 from app.core.database import SessionLocal
-from app.models import Task
+from app.models import Agent, Task
 
 router = APIRouter()
 
@@ -66,6 +66,23 @@ def _spawn_asmoday_children(
             continue
 
 
+def _mark_failed(session: Session, task_id: uuid.UUID, assigned_to: str, error: str) -> None:
+    """lands the task + its agent on failed after something blew up outside the agent's own error handling"""
+    try:
+        task = session.get(Task, task_id)
+        if task is not None:
+            task.status = "failed"
+            task.result = {"error": error}  # same shape as the agent-failure path, one thing for a reader to learn
+        agent_row = session.query(Agent).filter(Agent.name == assigned_to).one_or_none()
+        if agent_row is not None:
+            agent_row.status = "failed"
+        session.commit()
+    except Exception:
+        # the DB itself is unreachable, so there's nowhere to write the failure -- give up here and
+        # let seed_agents' boot-time reset be the backstop. re-raising would just kill the poll tick
+        session.rollback()
+
+
 def _run_agent_task(
     task_id: uuid.UUID,
     assigned_to: str,
@@ -78,6 +95,11 @@ def _run_agent_task(
     try:
         task = session.get(Task, task_id)
         task.status = "running"
+        # the agent row rides along with the task's status -- every run goes through here, so the
+        # status page covers scheduler-triggered runs and API-triggered ones without separate wiring
+        agent_row = session.query(Agent).filter(Agent.name == assigned_to).one_or_none()
+        if agent_row is not None:
+            agent_row.status = "running"
         session.commit()
 
         agent_class = AGENT_CLASSES.get(assigned_to, BaseAgent)
@@ -86,12 +108,23 @@ def _run_agent_task(
 
         task.status = agent.state
         task.result = result if agent.state == "done" else {"error": agent.error}
+        # settles at done/failed rather than going back to idle -- a failure has to stay
+        # visible on the status page, not flash by for one poll
+        if agent_row is not None:
+            agent_row.status = agent.state
         session.commit()
 
         # a finished Prometheus plan spawns Asmoday children as pending rows -- they don't run
         # here, the next poll tick picks them up
         if assigned_to == "Prometheus" and agent.state == "done":
             _spawn_asmoday_children(session, task, result, agent_configs)
+    except Exception as exc:
+        # BaseAgent.run() already swallows the agent's own failures -- this catches everything
+        # AROUND it: a dropped supabase connection, a commit failing, a task row deleted mid-tick.
+        # without it the row sits at "running" forever, since the poller only ever queries "pending"
+        # and nothing would pick it back up. a visible failure beats a silent zombie
+        session.rollback()  # a failed commit poisons the session, nothing else works until this
+        _mark_failed(session, task_id, assigned_to, f"{type(exc).__name__}: {exc}")
     finally:
         session.close()
 
